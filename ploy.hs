@@ -1,12 +1,34 @@
 data Token = Token {start :: (Int, Int), dirs :: [Int]}
+	deriving Show
 
 
---TODO:
---III: generate list of tokens, list of valid_fields
--- Plan: create tokens and determine valid fields according to tokens
+-- param: encoded board string, player turn
+-- return: string list of all possible moves
+get_moves :: String -> Char -> [String]
+get_moves board color = zuge tokens fields
+	where (tokens, fields) = get_info board color
 
 
+-- param: encoded board string, player turn
+-- return: list of player tokens, list of valid fields
+get_info :: String -> Char -> ([Token], [(Int, Int)])
+get_info board color = 
+	(generate_tokens bstr color, get_fields bstr color)
+	where bstr = parse_board board
 
+
+-- given list of board strings and player turn color
+-- return valid fields list
+get_fields :: [String] -> Char -> [(Int, Int)]
+get_fields bstrings c =
+	map get_pos (map fst (filter (\x -> head (snd x) /= c) (enum bstrings)))
+
+
+-- given list of board element strings & player color (w/b)
+-- returns token list of corresponding player
+generate_tokens :: [String] -> Char -> [Token]
+generate_tokens board_list a =
+	[Token (get_pos a) (get_dirs b) | (a, b) <- filter_color (enum board_list) a]
 
 
 -- given (correctly formatted w/ 81 entries) board string
@@ -16,6 +38,31 @@ parse_board xs
 	| length (clean_line xs) `mod` 9 == 8 = clean_line xs ++ ["0"]
 	| length (clean_line xs) `mod` 9 == 0 = clean_line xs
 	| otherwise = error "incorrect format"
+
+
+-- returns list of strings of given color
+filter_color :: [(Int, String)] -> Char -> [(Int, String)]
+filter_color list a = filter (\x -> head (snd x) == a) list
+
+
+-- (x: col, y: row)
+-- enumerate [1..81]: (1,9), (2,9) ... (9,9), 
+--					  (1,8), (2,8) ... (9,8), 
+--				  ... (1,1), (2,1) ... (9,1)
+get_dirs :: String -> [Int]
+get_dirs (x:xs) = get_directions (read xs :: Int)
+
+get_pos :: Int -> (Int, Int)
+get_pos n = (get_x n, get_y n)
+
+get_x n = if n `mod` 9 /= 0 then n `mod` 9
+			else 9
+
+get_y n = if n `mod` 9 /= 0 then y
+			else y + 1
+	where y = 9 - (n `div` 9)
+
+enum = zip [1..]
 
 -- returns list of 'cleaned' entries
 clean_line :: String -> [String]
@@ -202,3 +249,10 @@ pos_tupel :: [Char] -> (Int, Int)
 pos_tupel (a:b:_) = (x, read[b] :: Int)
 	where x = snd (head [(h,g)|(h,g) <- zip ['a'..'i'] [1..9], h == a])
 
+print_tokens :: [Token] -> [((Int, Int), [Int])]
+print_tokens tokens = 
+	[(start t, dirs t) | t <- tokens]
+
+filter_out_rotations :: [String] -> [String]
+filter_out_rotations moves =
+	filter (\x -> last x == '0') moves
