@@ -1,12 +1,69 @@
 data Token = Token {start :: (Int, Int), dirs :: [Int]}
 
 
-
 --TODO:
 --III: generate list of tokens, list of valid_fields
---II: parse input string
+-- Plan: create tokens and determine valid fields according to tokens
 
 
+
+
+
+-- given (correctly formatted w/ 81 entries) board string
+-- returns list of strings: zeros if empty, compacted strings otherwise
+parse_board :: String -> [String]
+parse_board xs 
+	| length (clean_line xs) `mod` 9 == 8 = clean_line xs ++ ["0"]
+	| length (clean_line xs) `mod` 9 == 0 = clean_line xs
+	| otherwise = error "incorrect format"
+
+-- returns list of 'cleaned' entries
+clean_line :: String -> [String]
+clean_line line = map clean_string (thru_line line)
+
+clean_string :: String -> String
+clean_string xs 
+	| head xs == ' ' && last xs == ' ' = init (tail xs)
+	| head xs == ' ' = tail xs
+	| last xs == ' ' = init xs
+	| otherwise = xs
+
+thru_line :: String -> [String]
+thru_line [] = []
+thru_line line = f x ++ thru_line (next_entry line)
+	where x = takeWhile (\x -> x /= ',' &&  x /= '/') line
+
+next_entry :: String -> String
+next_entry line = drop 1 (dropWhile (\x -> x /= ',' &&  x /= '/') line)
+
+f :: String -> [String]
+f x = if x == "" || x == " " then ["0"] else [x]
+
+-- given int returns directions list
+get_directions :: Int -> [Int]
+get_directions n = [a | (a, b) <- zip [7,6,5,4,3,2,1,0] xs, b == 1]
+	where xs = to_binary n
+
+-- binary list
+to_binary :: Int -> [Int]
+to_binary n = fill (to_bin2 n)
+
+-- fill ggf. list with 8 entries
+fill :: [Int] -> [Int]
+fill xs = 
+	if length xs < 8 then fill ([0] ++ xs)
+	else xs
+
+to_bin2 :: Int -> [Int]
+to_bin2 n = tail (to_bin n)
+
+-- from 'ehird' in stackoverflow: 'How to implement decimal
+-- 		to binary conversion'
+to_bin :: Int -> [Int]
+to_bin 0 = [0]
+to_bin n 
+	| n `mod` 2 == 1 = to_bin (n `div` 2) ++ [1]
+	| n `mod` 2 == 0 = to_bin (n `div` 2) ++ [0]
 
 -- generate all moves for list of tokens
 zuge :: [Token] -> [(Int, Int)] -> [String]
