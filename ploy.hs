@@ -1,3 +1,16 @@
+-- CALL ME BABY
+list_moves :: String -> String
+list_moves xs = to_string (get_moves2 xs)
+
+-- format: [a9-b8-0,c7-c7-2]
+to_string :: [String] -> String
+to_string strs = 
+	"[" ++ (init (concatMap (++ ",") strs)) ++ "]"
+
+-- param: "board, w/b"
+get_moves2 :: String -> [String]
+get_moves2 str = get_moves (init str) (last str)
+
 data Token = Token {start :: (Int, Int), dirs :: [Int]}
 	deriving Show
 
