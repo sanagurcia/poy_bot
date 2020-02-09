@@ -1,35 +1,35 @@
 data Token = Token {start :: (Int, Int), dirs :: [Int]}
 	deriving Show
 
-
 -- param: encoded board string, player turn
 -- return: string list of all possible moves
 get_moves :: String -> Char -> [String]
-get_moves board color = zuge tokens fields
-	where (tokens, fields) = get_info board color
-
+get_moves board color = zuge tokens f_fields v_fields
+	where (tokens, f_fields, v_fields) = get_info board color
 
 -- param: encoded board string, player turn
--- return: list of player tokens, list of valid fields
-get_info :: String -> Char -> ([Token], [(Int, Int)])
+-- return: player tokens, free fields, valid fields
+get_info :: String -> Char -> ([Token], [(Int, Int)], [(Int, Int)])
 get_info board color = 
-	(generate_tokens bstr color, get_fields bstr color)
+	(generate_tokens bstr color, get_free_fields bstr, get_valid_fields bstr color)
 	where bstr = parse_board board
 
+-- sames as below but remove all fields with pieces on them
+get_free_fields :: [String] -> [(Int, Int)]
+get_free_fields bstrings =
+	map get_pos (map fst (filter (\x -> snd x == "0") (enum bstrings)))
 
 -- given list of board strings and player turn color
--- return valid fields list
-get_fields :: [String] -> Char -> [(Int, Int)]
-get_fields bstrings c =
+-- return valid fields 
+get_valid_fields :: [String] -> Char -> [(Int, Int)]
+get_valid_fields bstrings c =
 	map get_pos (map fst (filter (\x -> head (snd x) /= c) (enum bstrings)))
-
 
 -- given list of board element strings & player color (w/b)
 -- returns token list of corresponding player
 generate_tokens :: [String] -> Char -> [Token]
 generate_tokens board_list a =
 	[Token (get_pos a) (get_dirs b) | (a, b) <- filter_color (enum board_list) a]
-
 
 -- given (correctly formatted w/ 81 entries) board string
 -- returns list of strings: zeros if empty, compacted strings otherwise
@@ -39,11 +39,9 @@ parse_board xs
 	| length (clean_line xs) `mod` 9 == 0 = clean_line xs
 	| otherwise = error "incorrect format"
 
-
 -- returns list of strings of given color
 filter_color :: [(Int, String)] -> Char -> [(Int, String)]
 filter_color list a = filter (\x -> head (snd x) == a) list
-
 
 -- (x: col, y: row)
 -- enumerate [1..81]: (1,9), (2,9) ... (9,9), 
@@ -113,31 +111,31 @@ to_bin n
 	| n `mod` 2 == 0 = to_bin (n `div` 2) ++ [0]
 
 -- generate all moves for list of tokens
-zuge :: [Token] -> [(Int, Int)] -> [String]
-zuge tokens fields =
-	concat [zuge_any t fields | t <- tokens] 
+zuge :: [Token] -> [(Int, Int)] -> [(Int, Int)] -> [String]
+zuge tokens f_fields v_fields =
+	concat [zuge_any t f_fields v_fields | t <- tokens] 
 
 -- generate all moves for any token
-zuge_any :: Token -> [(Int, Int)] -> [String]
-zuge_any t fields =
-	if length (dirs t) > 1 then zuge_generic t fields
-	else zuge_generic t fields ++ zuge_shield t fields
+zuge_any :: Token -> [(Int, Int)] -> [(Int, Int)] -> [String]
+zuge_any t f_fields v_fields =
+	if length (dirs t) > 1 then zuge_generic t f_fields v_fields
+	else zuge_generic t f_fields v_fields ++ zuge_shield t f_fields v_fields
 
 -- generate extra moves for shields 
 -- i.e., rotation after ea/ move
-zuge_shield :: Token -> [(Int, Int)] -> [String]
-zuge_shield shield fields =
-	concat [add_rotations move | move <- token_move shield fields]
+zuge_shield :: Token -> [(Int, Int)] -> [(Int, Int)] -> [String]
+zuge_shield shield f_fields v_fields =
+	concat [add_rotations move | move <- token_move shield f_fields v_fields]
 
 -- for given non-shield token, generate all move strings
-zuge_generic :: Token -> [(Int, Int)] -> [String]
-zuge_generic token fields = 
-	bewegung_zuge token fields ++ rotation_zuge token
+zuge_generic :: Token -> [(Int, Int)] -> [(Int, Int)] -> [String]
+zuge_generic token f_fields v_fields = 
+	bewegung_zuge token f_fields v_fields ++ rotation_zuge token
 	
 -- get moves with no rotation
-bewegung_zuge :: Token -> [(Int, Int)] -> [String]
-bewegung_zuge token fields =
-	[m ++ "-0" | m <- token_move token fields]
+bewegung_zuge :: Token -> [(Int, Int)] -> [(Int, Int)] -> [String]
+bewegung_zuge token f_fields v_fields =
+	[m ++ "-0" | m <- token_move token f_fields v_fields]
 
 -- generate rotation moves for non-displacement
 rotation_zuge :: Token -> [String]
@@ -150,15 +148,15 @@ add_rotations move = [move ++ "-" ++ [a] | a <- ['1'..'7']]
 
 -- ESSENCE
 -- returns list of start-end moves
-token_move :: Token -> [(Int, Int)] -> [String]
-token_move token fields =
-	[prefix ++ z | z <- token_ziel token fields]
+token_move :: Token -> [(Int, Int)] -> [(Int, Int)] -> [String]
+token_move token f_fields v_fields =
+	[prefix ++ z | z <- token_ziel token f_fields v_fields]
 	where prefix = pos_string (start token) ++ "-"
 
 -- given token & valid fields returns list of target strings
-token_ziel :: Token -> [(Int, Int)] -> [String]
-token_ziel token fields = 
-	list_out (targets (start token) (dirs token) fields)
+token_ziel :: Token -> [(Int, Int)] -> [(Int, Int)] -> [String]
+token_ziel token f_fields v_fields = 
+	list_out (targets (start token) (dirs token) f_fields v_fields)
 
 -- convert list of tupel positions to strings
 list_out :: [(Int, Int)] -> [String]
@@ -169,34 +167,35 @@ pos_string :: (Int, Int) -> String
 pos_string (x, y) = [a] ++ show y
 	where a = fst (head [(h,g)|(h,g) <- zip ['a'..'i'] [1..9], g == x])
 
--- given (start, directions_list, valid_fields)
+-- given (start, directions, free_fields, valid_fields)
 -- returns valid positions
-targets :: (Int, Int) -> [Int] -> [(Int, Int)] -> [(Int, Int)]
-targets start dirs fields = 
-	concat [valid_targets_to_n start d fields n | d <- dirs]
+targets :: (Int, Int) -> [Int] -> [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
+targets start dirs f_fields v_fields = 
+	concat [valid_targets_to_n start d f_fields v_fields n | d <- dirs]
 	where n = if length dirs < 4 then length dirs else 1 
 
--- given (start, direction, valid_fields, steps) 
+-- given (start, direction, free_fields, valid_fields, steps) 
 -- returns list of valid positions up to n steps
-valid_targets_to_n :: (Int, Int) -> Int -> [(Int, Int)] -> Int -> [(Int, Int)]
-valid_targets_to_n start dir fields n = 
-		[tgt | tgt <- get_targets_to_n start dir fields n, tgt /= (-1, -1)]
+valid_targets_to_n :: (Int, Int) -> Int -> [(Int, Int)] -> [(Int, Int)] -> Int -> [(Int, Int)]
+valid_targets_to_n start dir f_fields v_fields n = 
+		[tgt | tgt <- get_targets_to_n start dir f_fields v_fields n, tgt /= (-1, -1)]
 
--- list of all targets w/in n steps
-get_targets_to_n :: (Int, Int) -> Int -> [(Int, Int)] -> Int -> [(Int, Int)]
-get_targets_to_n start dir fields n =
-	if n == 1 then get_target_n start dir fields n : []
-		else get_target_n start dir fields n : get_targets_to_n start dir fields (n-1)
- 	
--- get targets with n steps
+-- list of all positions w/in n steps
+get_targets_to_n :: (Int, Int) -> Int -> [(Int, Int)] -> [(Int, Int)] -> Int -> [(Int, Int)]
+get_targets_to_n start dir f_fields v_fields n =
+	if n == 1 then get_target_n start dir f_fields v_fields n : []
+		else get_target_n start dir f_fields v_fields n : get_targets_to_n start dir f_fields v_fields (n-1)
+
+-- get valid targets with n steps
 -- returns position if valid, else (-1, -1)
-get_target_n :: (Int, Int) -> Int -> [(Int, Int)] -> Int -> (Int, Int)
-get_target_n start dir fields n = 
-	if try_n_move start dir fields n
+get_target_n :: (Int, Int) -> Int -> [(Int, Int)] -> [(Int, Int)] -> Int -> (Int, Int)
+get_target_n start dir free_fields valid_fields n = 
+	if try_n_move start dir free_fields valid_fields n
 		then get_end_n start dir n
 	else (-1, -1)
 
 -- get target w/ n steps
+-- (start, direction, steps)
 get_end_n :: (Int, Int) -> Int -> Int -> (Int, Int)
 get_end_n start dir n 
 	| n == 1 = get_end start dir
@@ -204,19 +203,35 @@ get_end_n start dir n
 	| n == 3 = get_end (get_end (get_end start dir) dir) dir
 	| otherwise = error "n not in range"
 
--- (start, direction, available fields, steps) -> Bool
-try_n_move :: (Int, Int) -> Int -> [(Int, Int)] -> Int -> Bool 
-try_n_move start dir fields n
-	| n == 1 = try_single_move start dir fields
-	| n == 2 = try_single_move (get_end start dir) dir fields
-	| n == 3 = try_single_move (get_end (get_end start dir) dir) dir fields
+-- (start, direction, free fields, valid fields, steps) -> Bool
+try_n_move :: (Int, Int) -> Int -> [(Int, Int)] -> [(Int, Int)] -> Int -> Bool 
+try_n_move start dir free_fields valid_fields n
+	| n == 1 = try_single_move start dir valid_fields
+	| n == 2 = try_2_move start dir free_fields valid_fields
+	| n == 3 = try_3_move start dir free_fields valid_fields
 	| otherwise = error "n not in range[1,3]"
 
--- given start, direction, free fields, try single move
+try_2_move :: (Int, Int) -> Int -> [(Int, Int)] -> [(Int, Int)] -> Bool
+try_2_move start dir free_fields valid_fields =
+	if try_single_move start dir free_fields == True then 
+		try_single_move (get_end start dir) dir valid_fields
+	else
+		False
+
+try_3_move :: (Int, Int) -> Int -> [(Int, Int)] -> [(Int, Int)] -> Bool
+try_3_move start dir free_fields valid_fields =
+	if try_single_move start dir free_fields == True then
+		try_2_move (get_end start dir) dir free_fields valid_fields
+	else
+		False
+
+-- given start, direction, fields
+-- return true if move valid
 try_single_move :: (Int, Int) -> Int -> [(Int, Int)] -> Bool
 try_single_move start dir fields = try_end (get_end start dir) fields
 
---returns true if given position is playable
+-- param: position, fields list
+--returns true if position available
 try_end :: (Int, Int) -> [(Int, Int)] -> Bool
 try_end end fields = elem end fields
 
@@ -238,6 +253,7 @@ dir_to_sum dir
 	| dir == 7 = (-1, 1)
 	| otherwise	= error "unknown direction"
 
+--------------------------------------------------------
 
 -- NOT NEEDED:
 -- convert list of string positions to tupels
@@ -256,3 +272,5 @@ print_tokens tokens =
 filter_out_rotations :: [String] -> [String]
 filter_out_rotations moves =
 	filter (\x -> last x == '0') moves
+
+
